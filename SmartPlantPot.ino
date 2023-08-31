@@ -133,9 +133,8 @@ void watering(){
   String str_waterAmount_fir = getStringPartByNr(waterAmount_fir, '"', 1);
   double waterAmount = str_waterAmount_fir.toInt();
 
-  double x = 23.50;
-  delay(1000);
-  Serial.println((waterAmount / x) * 1000.00);
+  double x = 23;
+  delay((waterAmount / x) * 1000.00);
   digitalWrite(pumpPin, HIGH);
   delay(1000);
 }
