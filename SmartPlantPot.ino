@@ -1,15 +1,17 @@
 //Pin Define for connection
 //D2 = Button WiFi Config
 //D5 = Water Pump Relay Pin
-//D6 = Trig Pin Uts
-//D7 = Echo Pin Uts
 //A0 = Soil Moisture Pin
+
+//Set Watering Duration
+int waterDuration = 5 * 1000;
 
 #include <ESP8266WiFi.h>
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
 #include <WiFiManager.h>
 #include <FirebaseESP8266.h>
+#include <NTPClient.h>
 
 //Define for FirebaseDatabase
 #define FIREBASE_HOST "smartplantpot-831ff-default-rtdb.firebaseio.com"
@@ -23,9 +25,8 @@ FirebaseData firebaseData;
 #define D7 13
 int duration;
 long distance;
-double waterDistance;
-double waterDivide;
-double waterPercent;
+long waterlevel;
+double waterpercent;
 
 //Define for WiFiManager
 #define ledPin D4
@@ -41,6 +42,11 @@ double waterPercent;
 //Define for Soil Moisture
 #define soilPin A0
 int moist;
+
+//NTP
+const char* ntpServer = "pool.ntp.org";
+const long gmtOffsetInSeconds = 25200;
+const int daylightOffsetInSeconds = 3600;
 
 void setup() {
   Serial.begin(9600);
@@ -81,64 +87,29 @@ void setup() {
 }
 
 void loop() {
+  //Check for application watering status
   if(fbReadData("SmartPlantPot/wateringStatus").equals("1")){
     watering();
   }
-  String minMoisture_fir = fbReadData("SmartPlantPot/minMoisture");
-  String str_minMoisture_fir = getStringPartByNr(minMoisture_fir, '"', 1);
-  int minMoisture = str_minMoisture_fir.toInt();
-  if(fbReadData("SmartPlantPot/moisture").toInt() <= minMoisture && (fbReadData("SmartPlantPot/moisture").toInt()) > 20) {
-    fbSendStringData("SmartPlantPot/wateringStatus", "1");
-    delay(0);
+  //Check for soil moisture read
+  if(fbReadData("SmartPlantPot/moisture").toInt() <= 40{
+    watering();
+    delay(60000); //Delay 1 min
   }
   measureMoist();
-  delay(500);
   measureWater();
   delay(500);
 }
 
-  String getStringPartByNr(String data, char separator, int index){
-    // spliting a string and return the part nr index
-    // split by separator
-
-    int stringData = 0;        //variable to count data part nr 
-    String dataPart = "";      //variable to hole the return text
-
-    for(int i = 0; i<data.length()-1; i++) {    //Walk through the text one letter at a time
-
-      if(data[i]==separator) {
-        //Count the number of times separator character appears in the text
-        stringData++;
-
-      }else if(stringData==index) {
-        //get the text when separator is the rignt one
-        dataPart.concat(data[i]);
-
-      }else if(stringData>index) {
-        //return text and stop if the next separator appears - to save CPU-time
-        return dataPart;
-        break;
-
-      }
-
-    }
-    //return text if this is the last part
-    return dataPart;
-  }
-
+//For doing watering method
 void watering(){
   digitalWrite(pumpPin, LOW);
   fbSendStringData("SmartPlantPot/wateringStatus", "0");
-  String waterAmount_fir = fbReadData("SmartPlantPot/waterAmount");
-  String str_waterAmount_fir = getStringPartByNr(waterAmount_fir, '"', 1);
-  double waterAmount = str_waterAmount_fir.toInt();
-
-  double x = 23;
-  delay((waterAmount / x) * 1000.00);
+  delay(waterDuration);
   digitalWrite(pumpPin, HIGH);
-  delay(1000);
 }
 
+//Measuring Moist Method
 void measureMoist(){
   moist = analogRead(soilPin);
   if(moist <= 15){
@@ -148,8 +119,10 @@ void measureMoist(){
     moist = map(moist, 550, 10, 0, 100);
     fbSendIntData("SmartPlantPot/moisture", moist);
   }
+  delay(1000);
 }
 
+//Measuring WaterLevel Method
 void measureWater(){
   digitalWrite(trigPin, LOW);
   
@@ -166,24 +139,23 @@ void measureWater(){
   //Calculate distance
   distance = duration*0.034/2;
 
-  waterDistance = 16 - distance;
-  waterDivide = waterDistance / 16;
-  waterPercent = waterDivide * 100;
-  if(waterPercent < 10.00){
-fbSendIntData("SmartPlantPot/waterLevel", 0);
-  }else {
-    fbSendIntData("SmartPlantPot/waterLevel", waterPercent);
-  }
+  waterpercent = ((16 - waterlevel) / 16) * 100;
+
+  fbSendIntData("SmartPlantPot/waterLevel", waterpercent);
+  delay(500);
 }
 
+//Sending data(String) to Firebase
 bool fbSendStringData(String data, String send) {
   bool fb = Firebase.setString(firebaseData, data, send);
   return fb;
 }
+//Sending data(Integer) to Firebase
 bool fbSendIntData(String data, int send) {
   bool fb = Firebase.setString(firebaseData, data, send);
   return fb;
 }
+//Read data form Firebase
 String fbReadData(String data){
   if (Firebase.getString(firebaseData, data)) {   
         String read_data = (firebaseData.stringData());
